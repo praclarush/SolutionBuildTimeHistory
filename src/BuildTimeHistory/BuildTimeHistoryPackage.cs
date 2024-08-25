@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BuildTimeHistory.Models;
+using BuildTimeHistory.Services;
 using Humanizer;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
@@ -38,6 +39,10 @@ namespace BuildTimeHistory
         private uint updateSolutionEventsCookie;
         private uint solutionEventsCookie;
 
+        private readonly BuildHistoryService _solutionBuildHistoryService = new BuildHistoryService();
+        private readonly Stopwatch _buildTimer = new Stopwatch();
+
+
         /// <summary>
         /// Initialization of the package; this method is called right after the package is sited, so this is the place
         /// where you can put all the initialization code that rely on services provided by VisualStudio.
@@ -57,7 +62,7 @@ namespace BuildTimeHistory
             sbm = ServiceProvider.GlobalProvider.GetService(typeof(SVsSolutionBuildManager)) as IVsSolutionBuildManager2;
             sbm?.AdviseUpdateSolutionEvents(this, out updateSolutionEventsCookie);
 
-            await OutputPane.Instance.WriteAsync($"{Vsix.Name} v{Vsix.Version}");            
+            await OutputPane.Instance.WriteAsync($"{Vsix.Name} v{Vsix.Version}");
         }
 
         #region Unused Interface
@@ -96,11 +101,6 @@ namespace BuildTimeHistory
             return VSConstants.S_OK;
         }
 
-        public int OnBeforeCloseSolution(object pUnkReserved)
-        {
-            return VSConstants.S_OK;
-        }
-
         public int OnAfterCloseSolution(object pUnkReserved)
         {
             return VSConstants.S_OK;
@@ -132,12 +132,15 @@ namespace BuildTimeHistory
         } 
         #endregion
 
-
-        readonly Stopwatch _buildTimer = new Stopwatch();
-
         public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
-        {
+        {            
             SolutionOpen();
+            return VSConstants.S_OK;
+        }
+
+        public int OnBeforeCloseSolution(object pUnkReserved)
+        {
+            _solutionBuildHistoryService.Save();
             return VSConstants.S_OK;
         }
 
@@ -156,36 +159,15 @@ namespace BuildTimeHistory
 
             return VSConstants.S_OK;
         }
+        
 
-        private string GetHistoryFilePath(string solutionName, int daysPast = 0)
-        {
-            var dateOfInstrest = DateTime.Now.AddDays(-daysPast);
-
-            var day = dateOfInstrest.ToString("yyyy-MM-dd");
-
-            var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "BuildTimeTracker",
-                solutionName,
-                dateOfInstrest.ToString("yyyy-MM"),
-                $"{day}.json");
-
-            return path;
-        }
-
-        private async Task SaveTodaysRecordAsync(string solutionName, DailyBuildHistory record)
+        //Converted
+        private async Task AddAndSaveBuildRecordAsync(BuildHistoryItem record)
         {
             try
             {
-                var path = GetHistoryFilePath(solutionName);
-
-                var dir = Path.GetDirectoryName(path);
-
-                if (!Directory.Exists(dir))
-                {
-                    Directory.CreateDirectory(dir);
-                }
-
-                File.WriteAllText(path, JsonConvert.SerializeObject(record));
+                _solutionBuildHistoryService.AddRecord(record);
+                _solutionBuildHistoryService.Save(); //Should this be moved to solution closed?
             }
             catch (Exception ex)
             {
@@ -196,52 +178,67 @@ namespace BuildTimeHistory
             }
         }
 
-        private async Task<(DailyBuildHistory, int)> GetMostRecentDaysRecordAsync(string solutionName)
-        {
-            try
-            {
-                for (int i = 0; i < 100; i++)
-                {
-                    var path = GetHistoryFilePath(solutionName, i);
+        //private string GetHistoryFilePath(string solutionName, int daysPast = 0)
+        //{
+        //    var dateOfInstrest = DateTime.Now.AddDays(-daysPast);
 
-                    if (File.Exists(path))
-                    {
-                        return (JsonConvert.DeserializeObject<DailyBuildHistory>(File.ReadAllText(path)), i);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                await OutputPane.Instance.WriteAsync("Failed to load history file for today");
-                await OutputPane.Instance.WriteAsync(ex.Message);
-                await OutputPane.Instance.WriteAsync(ex.Source);
-                await OutputPane.Instance.WriteAsync(ex.StackTrace);
-            }
+        //    var day = dateOfInstrest.ToString("yyyy-MM-dd");
 
-            return (new DailyBuildHistory(), int.MinValue);
-        }
+        //    var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        //        "BuildTimeTracker",
+        //        solutionName,
+        //        dateOfInstrest.ToString("yyyy-MM"),
+        //        $"{day}.json");
 
-        private async Task<DailyBuildHistory> GetTodaysRecordAsync(string solutionName)
-        {
-            try
-            {
-                var path = GetHistoryFilePath(solutionName);
+        //    return path;
+        //}
 
-                if (File.Exists(path))
-                {
-                    return JsonConvert.DeserializeObject<DailyBuildHistory>(File.ReadAllText(path));
-                }
-            }
-            catch (Exception ex)
-            {
-                await OutputPane.Instance.WriteAsync("Failed to load history file for today");
-                await OutputPane.Instance.WriteAsync(ex.Message);
-                await OutputPane.Instance.WriteAsync(ex.Source);
-                await OutputPane.Instance.WriteAsync(ex.StackTrace);
-            }
+        //private async Task<(DailyBuildHistory, int)> GetMostRecentDaysRecordAsync(string solutionName)
+        //{
+        //    try
+        //    {
+        //        for (int i = 0; i < 100; i++)
+        //        {
+        //            var path = GetHistoryFilePath(solutionName, i);
 
-            return new DailyBuildHistory();
-        }
+        //            if (File.Exists(path))
+        //            {
+        //                return (JsonConvert.DeserializeObject<DailyBuildHistory>(File.ReadAllText(path)), i);
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        await OutputPane.Instance.WriteAsync("Failed to load history file for today");
+        //        await OutputPane.Instance.WriteAsync(ex.Message);
+        //        await OutputPane.Instance.WriteAsync(ex.Source);
+        //        await OutputPane.Instance.WriteAsync(ex.StackTrace);
+        //    }
+
+        //    return (new DailyBuildHistory(), int.MinValue);
+        //}
+
+        //private async Task<DailyBuildHistory> GetTodaysRecordAsync(string solutionName)
+        //{
+        //    try
+        //    {
+        //        var path = GetHistoryFilePath(solutionName);
+
+        //        if (File.Exists(path))
+        //        {
+        //            return JsonConvert.DeserializeObject<DailyBuildHistory>(File.ReadAllText(path));
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        await OutputPane.Instance.WriteAsync("Failed to load history file for today");
+        //        await OutputPane.Instance.WriteAsync(ex.Message);
+        //        await OutputPane.Instance.WriteAsync(ex.Source);
+        //        await OutputPane.Instance.WriteAsync(ex.StackTrace);
+        //    }
+
+        //    return new DailyBuildHistory();
+        //}
 
         private void ProcessFinish(bool wasSuccessful, bool wasCancelled)
         {
@@ -257,9 +254,8 @@ namespace BuildTimeHistory
                 try
                 {
                     var buildDuration = _buildTimer.ElapsedMilliseconds;
-                    var solutionName = GetCurrentSolutionName();
 
-                    var todaysRecord = await GetTodaysRecordAsync(solutionName);
+                    var record = new BuildHistoryItem() { RecordDate = DateTime.Now };
 
                     var sb = new StringBuilder();
 
@@ -268,38 +264,35 @@ namespace BuildTimeHistory
                     if (wasSuccessful)
                     {
                         sb.AppendLine($"Build completed successfully after {TimeSpan.FromMilliseconds(buildDuration).Humanize()}");
-                        BuildHistoryItem item = new BuildHistoryItem { RecordDate = DateTime.Now, Status = Enums.BuildCompletionStatus.Succeeded };
+
+                        record.Status = Enums.BuildCompletionStatus.Succeeded;
 
                         if (includeTimeInHistory)
                         {
-                            item.BuildTime = buildDuration;
+                            record.BuildTime = buildDuration;
                         }
-
-                        todaysRecord.BuildHistory.Add(item);
                     }
                     else if (wasCancelled)
                     {
                         sb.AppendLine($"Build was cancelled after {TimeSpan.FromMilliseconds(buildDuration).Humanize()}");
-                        BuildHistoryItem item = new BuildHistoryItem { RecordDate = DateTime.Now, Status = Enums.BuildCompletionStatus.Cancelled };
+
+                        record.Status = Enums.BuildCompletionStatus.Cancelled;
 
                         if (includeTimeInHistory)
                         {
-                            item.BuildTime = buildDuration;
+                            record.BuildTime = buildDuration;
                         }
-
-                        todaysRecord.BuildHistory.Add(item);
                     }
                     else
                     {
                         sb.AppendLine($"Build failed after {TimeSpan.FromMilliseconds(buildDuration).Humanize()}");
-                        BuildHistoryItem item = new BuildHistoryItem { RecordDate = DateTime.Now, Status = Enums.BuildCompletionStatus.Failed };
+
+                        record.Status = Enums.BuildCompletionStatus.Failed;
 
                         if (includeTimeInHistory)
                         {
-                            item.BuildTime = buildDuration;
+                            record.BuildTime = buildDuration;
                         }
-
-                        todaysRecord.BuildHistory.Add(item);
                     }
 
                     if (!includeTimeInHistory)
@@ -307,8 +300,9 @@ namespace BuildTimeHistory
                         await OutputPane.Instance.WriteAsync("** Build time is unavailable and won't be added to the cumulative history.");
                     }
 
-                    await SaveTodaysRecordAsync(solutionName, todaysRecord);
-
+                    await AddAndSaveBuildRecordAsync(record);
+                    
+                    var todaysRecord = _solutionBuildHistoryService.GetTodaysRecord();
                     var totalBuildTime = TimeSpan.FromMilliseconds(todaysRecord.TotalBuildTime);
                     var averageBuildTime = TimeSpan.FromMilliseconds(todaysRecord.AverageBuildTime);
 
@@ -345,6 +339,7 @@ namespace BuildTimeHistory
             return string.Empty;
         }
 
+        //Converted
         private void SolutionOpen()
         {
             ThreadHelper.JoinableTaskFactory.Run(async delegate
@@ -352,24 +347,24 @@ namespace BuildTimeHistory
                 try
                 {
                     var solutionName = GetCurrentSolutionName();
+                    _solutionBuildHistoryService.Initialize(solutionName);
 
-                    var (latestRecord, daysAgo) = await GetMostRecentDaysRecordAsync(solutionName);
+                    var latestRecord = _solutionBuildHistoryService.GetMostRecentDayRecord();
 
-                    if (daysAgo > int.MinValue && latestRecord.TotalCount > 0)
+                    if (latestRecord != null)
                     {
                         var sb = new StringBuilder();
-
-                        if (daysAgo == 0)
+                        if (latestRecord.Date.Date == DateTime.Now.Date)
                         {
                             sb.Append("Today's build summary: ");
                         }
-                        else if (daysAgo == 1)
+                        else if (latestRecord.Date.Date == DateTime.Now.AddDays(-1))                         
                         {
                             sb.Append("Yesterday's build summary: ");
                         }
                         else
                         {
-                            sb.Append($"Build summary for {DateTime.Now.AddDays(daysAgo):dddd, MMMM d} : ");
+                            sb.Append($"Build summary for {latestRecord.Date.ToShortDateString()}: ");
                         }
 
                         var totalBuildTime = TimeSpan.FromMilliseconds(latestRecord.TotalBuildTime);
@@ -379,7 +374,6 @@ namespace BuildTimeHistory
                         sb.Append($"({latestRecord.TotalSuccess} successful, {latestRecord.TotalFailed} failed, {latestRecord.TotalCancelled} cancelled) ");
                         sb.Append($"taking a total of {totalBuildTime.Humanize()} ({totalBuildTime.Hours:00}:{totalBuildTime.Minutes:00}:{totalBuildTime.Seconds:00})");
                         sb.Append($"with an average of {averageBuildTime.Humanize()} ({averageBuildTime.Hours:00}:{averageBuildTime.Minutes:00}:{averageBuildTime.Seconds:00}) per build");
-
 
                         await OutputPane.Instance.WriteAsync(sb.ToString());
                     }

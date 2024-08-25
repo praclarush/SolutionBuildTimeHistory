@@ -8,9 +8,9 @@ namespace BuildTimeHistory.Enums
 {
     public enum BuildCompletionStatus
     {
-        Unknown,
-        Succeeded,
-        Failed,
-        Cancelled
+        Unknown = 0,
+        Succeeded = 1,
+        Failed = 2,
+        Cancelled = 3
     }
 }
