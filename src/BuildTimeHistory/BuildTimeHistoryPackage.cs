@@ -307,7 +307,7 @@ namespace BuildTimeHistory
                     var averageBuildTime = TimeSpan.FromMilliseconds(todaysRecord.AverageBuildTime);
 
                     sb.Append($"Today's build summary: ");
-                    sb.Append($"{todaysRecord.TotalCount} build {(todaysRecord.TotalCount > 1 ? "s" : string.Empty)} ");
+                    sb.Append($"{todaysRecord.TotalCount} build{(todaysRecord.TotalCount > 1 ? "s" : string.Empty)} ");
                     sb.Append($"({todaysRecord.TotalSuccess} successful, {todaysRecord.TotalFailed} failed, {todaysRecord.TotalCancelled} cancelled) ");
                     sb.Append($"taking a total of {totalBuildTime.Humanize()} ({totalBuildTime.Hours:00}:{totalBuildTime.Minutes:00}:{totalBuildTime.Seconds:00}) ");
                     sb.Append($"with an average of {averageBuildTime.Humanize()} ({averageBuildTime.Hours:00}:{averageBuildTime.Minutes:00}:{averageBuildTime.Seconds:00}) per build ");

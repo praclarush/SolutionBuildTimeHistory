@@ -48,7 +48,7 @@ namespace BuildTimeHistory.Services
                 }
                 else
                 {
-                    _buildHistory = new SolutionBuildHistory() { SolutionName = _solutionName };
+                    _buildHistory = new SolutionBuildHistory() { SolutionName = _solutionName, DateCreated = DateTime.Now, LastUpdated = DateTime.Now };
                 }
             }
             catch (Exception)
@@ -80,11 +80,23 @@ namespace BuildTimeHistory.Services
             }
         }
 
+
         public DailyBuildHistory GetTodaysRecord()
         {
             ThrowIfNotInitalized();
 
             var record = _buildHistory.DailyBuildHistory.SingleOrDefault(x => x.Date.Date == DateTime.Today.Date);
+
+            if (record == null)
+            {
+                record = new DailyBuildHistory()
+                {
+                    Date = DateTime.Now
+                };
+
+                _buildHistory.DailyBuildHistory.Add(record);
+            }
+
             return record;
         }
 
@@ -100,15 +112,22 @@ namespace BuildTimeHistory.Services
         public bool Save()
         {
             ThrowIfNotInitalized();
-            
-            if (!Directory.Exists(_fileBasePath))
+
+            try
             {
-                Directory.CreateDirectory(_fileBasePath);
+                if (!Directory.Exists(_fileBasePath))
+                {
+                    Directory.CreateDirectory(_fileBasePath);
+                }
+
+                File.WriteAllText(FilePath, JsonConvert.SerializeObject(_buildHistory));
+
+                return true;
             }
-
-            File.WriteAllText(FilePath, JsonConvert.SerializeObject(_buildHistory));
-
-            return true;
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         public bool Refresh()
