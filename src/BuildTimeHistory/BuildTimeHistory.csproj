@@ -47,16 +47,18 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="BuildTimeHistoryPackage.cs" />
-    <Compile Include="HistoryRecord.cs" />
+    <Compile Include="Enums\BuildCompletionStatus.cs" />
+    <Compile Include="Models\BuildHistoryItem.cs" />
+    <Compile Include="Models\DailyBuildHistory.cs" />
+    <Compile Include="Models\SolutionBuildHistory.cs" />
     <Compile Include="OutputPane.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\BuildHistoryService.cs" />
     <Compile Include="source.extension.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>source.extension.vsixmanifest</DependentUpon>
     </Compile>
-    <Compile Include="SponsorDetector.cs" />
-    <Compile Include="SponsorRequestHelper.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="signvsix.targets" />
